@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Playtest Reports Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --critical: #f85149;
+    --high: #db6d28;
+    --medium: #d29922;
+    --low: #3fb950;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); margin-bottom: 24px; font-size: 0.95rem; }
+
+  .config {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .config input {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    flex: 1;
+    min-width: 140px;
+  }
+  .config button {
+    background: var(--accent);
+    color: #0d1117;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+  .config button:hover { opacity: 0.85; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+  }
+  .stat-card .num { font-size: 1.8rem; font-weight: 700; }
+  .stat-card .label { color: var(--muted); font-size: 0.8rem; margin-top: 4px; }
+
+  .section { margin-bottom: 28px; }
+  .section h2 {
+    font-size: 1.05rem;
+    margin-bottom: 12px;
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+  }
+
+  .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .bar-label { width: 140px; font-size: 0.85rem; color: var(--muted); flex-shrink: 0; }
+  .bar-track {
+    flex: 1;
+    background: var(--border);
+    border-radius: 4px;
+    height: 18px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.4s ease;
+  }
+  .bar-count { width: 32px; text-align: right; font-size: 0.85rem; color: var(--muted); flex-shrink: 0; }
+
+  .issue-list { display: flex; flex-direction: column; gap: 8px; }
+  .issue-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    cursor: pointer;
+    text-decoration: none;
+    color: var(--text);
+    display: block;
+  }
+  .issue-card:hover { border-color: var(--accent); }
+  .issue-title { font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; }
+  .issue-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .tag {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .tag.critical { color: var(--critical); border-color: var(--critical); }
+  .tag.high { color: var(--high); border-color: var(--high); }
+  .tag.medium { color: var(--medium); border-color: var(--medium); }
+  .tag.low { color: var(--low); border-color: var(--low); }
+  .issue-num { color: var(--muted); font-size: 0.8rem; }
+
+  .empty, .loading, .error {
+    text-align: center;
+    color: var(--muted);
+    padding: 40px 20px;
+  }
+  .error { color: var(--critical); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Playtest Reports Dashboard</h1>
+  <div class="subtitle">Live bug report data pulled from GitHub Issues</div>
+
+  <div class="config">
+    <input id="username" type="text" placeholder="GitHub username (e.g. adevb6645)">
+    <input id="repo" type="text" placeholder="Repo name (e.g. playtest-reports)">
+    <button onclick="loadData()">Load</button>
+  </div>
+
+  <div id="content">
+    <div class="loading">Enter a username and repo above to get started.</div>
+  </div>
+</div>
+
+<script>
+const SEVERITY_ORDER = ['Critical', 'High', 'Medium', 'Low'];
+const SEVERITY_CLASS = {
+  'Critical': 'critical',
+  'High': 'high',
+  'Medium': 'medium',
+  'Low': 'low'
+};
+
+function saveConfig(username, repo) {
+  try {
+    document.cookie = `ptd_username=${encodeURIComponent(username)}; max-age=31536000; path=/`;
+    document.cookie = `ptd_repo=${encodeURIComponent(repo)}; max-age=31536000; path=/`;
+  } catch (e) { /* ignore */ }
+}
+
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : '';
+}
+
+function severityFromLabels(labels) {
+  for (const s of SEVERITY_ORDER) {
+    if (labels.some(l => l.name.toLowerCase().includes(s.toLowerCase()))) return s;
+  }
+  return null;
+}
+
+function gameFromLabels(labels) {
+  const gameLabel = labels.find(l => l.name.toLowerCase().startsWith('game:'));
+  return gameLabel ? gameLabel.name.split(':')[1].trim() : 'Unspecified';
+}
+
+function typeFromLabels(labels) {
+  const typeLabel = labels.find(l => l.name.toLowerCase().startsWith('type:'));
+  return typeLabel ? typeLabel.name.split(':')[1].trim() : 'Unspecified';
+}
+
+function renderBars(containerId, counts, colorMap) {
+  const container = document.getElementById(containerId);
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  if (total === 0) {
+    container.innerHTML = '<div class="empty" style="padding:12px 0;">No data yet</div>';
+    return;
+  }
+  container.innerHTML = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, count]) => {
+      const pct = total ? (count / total) * 100 : 0;
+      const color = colorMap && colorMap[label] ? colorMap[label] : 'var(--accent)';
+      return `
+        <div class="bar-row">
+          <div class="bar-label">${label}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:${color};"></div></div>
+          <div class="bar-count">${count}</div>
+        </div>`;
+    }).join('');
+}
+
+async function loadData() {
+  const username = document.getElementById('username').value.trim();
+  const repo = document.getElementById('repo').value.trim();
+  const content = document.getElementById('content');
+
+  if (!username || !repo) {
+    content.innerHTML = '<div class="error">Enter both a username and repo name.</div>';
+    return;
+  }
+
+  saveConfig(username, repo);
+  content.innerHTML = '<div class="loading">Loading issues from GitHub...</div>';
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${username}/${repo}/issues?state=all&per_page=100`);
+    if (!res.ok) {
+      if (res.status === 404) {
+        content.innerHTML = '<div class="error">Repo not found. Check the username and repo name.</div>';
+      } else if (res.status === 403) {
+        content.innerHTML = '<div class="error">GitHub API rate limit hit. Try again in a few minutes.</div>';
+      } else {
+        content.innerHTML = `<div class="error">GitHub API error (${res.status}).</div>`;
+      }
+      return;
+    }
+    const issues = (await res.json()).filter(i => !i.pull_request);
+
+    const total = issues.length;
+    const open = issues.filter(i => i.state === 'open').length;
+    const closed = issues.filter(i => i.state === 'closed').length;
+    const criticalOpen = issues.filter(i =>
+      i.state === 'open' && i.labels.some(l => l.name.toLowerCase().includes('critical'))
+    ).length;
+
+    const gameCounts = {};
+    const severityCounts = {};
+    const typeCounts = {};
+
+    issues.forEach(issue => {
+      const labels = issue.labels;
+      const game = gameFromLabels(labels);
+      const severity = severityFromLabels(labels) || 'Unspecified';
+      const type = typeFromLabels(labels);
+
+      gameCounts[game] = (gameCounts[game] || 0) + 1;
+      severityCounts[severity] = (severityCounts[severity] || 0) + 1;
+      typeCounts[type] = (typeCounts[type] || 0) + 1;
+    });
+
+    const severityColorMap = {
+      'Critical': 'var(--critical)',
+      'High': 'var(--high)',
+      'Medium': 'var(--medium)',
+      'Low': 'var(--low)',
+      'Unspecified': 'var(--muted)'
+    };
+
+    const recentIssues = [...issues]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 10);
+
+    content.innerHTML = `
+      <div class="stats">
+        <div class="stat-card"><div class="num">${total}</div><div class="label">Total Reports</div></div>
+        <div class="stat-card"><div class="num">${open}</div><div class="label">Open</div></div>
+        <div class="stat-card"><div class="num">${closed}</div><div class="label">Resolved</div></div>
+        <div class="stat-card"><div class="num">${criticalOpen}</div><div class="label">Critical Open</div></div>
+      </div>
+
+      <div class="section">
+        <h2>By Game</h2>
+        <div id="gameBars"></div>
+      </div>
+
+      <div class="section">
+        <h2>By Severity</h2>
+        <div id="severityBars"></div>
+      </div>
+
+      <div class="section">
+        <h2>By Type</h2>
+        <div id="typeBars"></div>
+      </div>
+
+      <div class="section">
+        <h2>Recent Reports</h2>
+        <div class="issue-list" id="issueList"></div>
+      </div>
+    `;
+
+    renderBars('gameBars', gameCounts, null);
+    renderBars('severityBars', severityCounts, severityColorMap);
+    renderBars('typeBars', typeCounts, null);
+
+    const issueList = document.getElementById('issueList');
+    if (recentIssues.length === 0) {
+      issueList.innerHTML = '<div class="empty">No reports filed yet.</div>';
+    } else {
+      issueList.innerHTML = recentIssues.map(issue => {
+        const severity = severityFromLabels(issue.labels);
+        const sevClass = severity ? SEVERITY_CLASS[severity] : '';
+        const stateTag = issue.state === 'open'
+          ? '<span class="tag" style="color:var(--accent);border-color:var(--accent);">open</span>'
+          : '<span class="tag">closed</span>';
+        return `
+          <a class="issue-card" href="${issue.html_url}" target="_blank" rel="noopener noreferrer">
+            <div class="issue-title">${escapeHtml(issue.title)}</div>
+            <div class="issue-meta">
+              <span class="issue-num">#${issue.number}</span>
+              ${stateTag}
+              ${severity ? `<span class="tag ${sevClass}">${severity}</span>` : ''}
+            </div>
+          </a>`;
+      }).join('');
+    }
+
+  } catch (err) {
+    content.innerHTML = `<div class="error">Something went wrong: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const savedUsername = getCookie('ptd_username');
+  const savedRepo = getCookie('ptd_repo');
+  if (savedUsername) document.getElementById('username').value = savedUsername;
+  if (savedRepo) document.getElementById('repo').value = savedRepo;
+  if (savedUsername && savedRepo) loadData();
+});
+</script>
+</body>
+</html>
