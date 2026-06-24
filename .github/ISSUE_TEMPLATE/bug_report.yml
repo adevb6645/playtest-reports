@@ -53,11 +53,11 @@ body:
     id: severity
     attributes:
       label: Severity
+      description: After submitting, apply the matching severity:* label to this issue.
       options:
-        - Critical (crash, save corruption, blocks progress)
-        - High (major feature broken)
-        - Medium (noticeable but workaroundable)
-        - Low (cosmetic / minor)
+        - High (breaks the game or blocks progress)
+        - Medium (noticeable, workaround exists)
+        - Low (cosmetic or minor annoyance)
     validations:
       required: true
 
@@ -65,13 +65,14 @@ body:
     id: type
     attributes:
       label: Bug Type
+      description: A bug can be more than one type. After submitting, apply all matching type:* labels to this issue.
+      multiple: true
       options:
-        - Functional
-        - Visual/UI
-        - Performance
-        - Audio
-        - Networking/Multiplayer
-        - Other
+        - Logic (game behaves incorrectly)
+        - Visual (rendering, UI, animation)
+        - Audio (sound or music issue)
+        - Performance (lag, crash, freeze)
+        - Other (does not fit the above)
     validations:
       required: true
 
