@@ -1,0 +1,92 @@
+name: Bug Report
+description: File a bug found during playtesting
+title: "[BUG] "
+labels: []
+body:
+  - type: input
+    id: game
+    attributes:
+      label: Game / Build
+      description: Which game and build/version was this found in?
+      placeholder: "e.g. Crater Command v0.4"
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One or two sentences describing the bug.
+      placeholder: "What went wrong?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Numbered steps so someone else can hit the same bug.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Result
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Result
+      description: What actually happened?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Critical (crash, save corruption, blocks progress)
+        - High (major feature broken)
+        - Medium (noticeable but workaroundable)
+        - Low (cosmetic / minor)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Bug Type
+      options:
+        - Functional
+        - Visual/UI
+        - Performance
+        - Audio
+        - Networking/Multiplayer
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, browser (if applicable), device, anything relevant.
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional Notes
+      description: Screenshots, logs, anything else useful.
+    validations:
+      required: false
