@@ -175,9 +175,15 @@ function getCookie(name) {
 }
 
 function severityFromLabels(labels) {
-  const sevLabel = labels.find(l => l.name.toLowerCase().startsWith('severity:'));
-  if (!sevLabel) return null;
-  const key = sevLabel.name.split(':')[1].trim().toLowerCase();
+  const sevLabels = labels.filter(l => l.name.toLowerCase().startsWith('severity:'));
+  if (sevLabels.length === 0) return null;
+  // If multiple severity labels somehow got applied, take the highest priority one
+  for (const tier of SEVERITY_ORDER) {
+    const match = sevLabels.find(l => l.name.toLowerCase() === `severity:${tier}`);
+    if (match) return SEVERITY_DISPLAY[tier];
+  }
+  // Fallback: unrecognized severity text, just use whatever was found
+  const key = sevLabels[0].name.split(':')[1].trim().toLowerCase();
   return SEVERITY_DISPLAY[key] || key;
 }
 
@@ -189,11 +195,13 @@ function gameFromLabels(labels) {
   return key.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
-function typeFromLabels(labels) {
-  const typeLabel = labels.find(l => l.name.toLowerCase().startsWith('type:'));
-  if (!typeLabel) return 'Unspecified';
-  const key = typeLabel.name.split(':')[1].trim();
-  return key.charAt(0).toUpperCase() + key.slice(1);
+function typesFromLabels(labels) {
+  const typeLabels = labels.filter(l => l.name.toLowerCase().startsWith('type:'));
+  if (typeLabels.length === 0) return ['Unspecified'];
+  return typeLabels.map(l => {
+    const key = l.name.split(':')[1].trim();
+    return key.charAt(0).toUpperCase() + key.slice(1);
+  });
 }
 
 function statusFromLabels(labels) {
@@ -261,16 +269,19 @@ async function loadData() {
     const gameCounts = {};
     const severityCounts = {};
     const typeCounts = {};
+    const statusCounts = {};
 
     issues.forEach(issue => {
       const labels = issue.labels;
       const game = gameFromLabels(labels);
       const severity = severityFromLabels(labels) || 'Unspecified';
-      const type = typeFromLabels(labels);
+      const types = typesFromLabels(labels);
+      const status = statusFromLabels(labels) || 'No status set';
 
       gameCounts[game] = (gameCounts[game] || 0) + 1;
       severityCounts[severity] = (severityCounts[severity] || 0) + 1;
-      typeCounts[type] = (typeCounts[type] || 0) + 1;
+      types.forEach(t => { typeCounts[t] = (typeCounts[t] || 0) + 1; });
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
     });
 
     const severityColorMap = {
@@ -278,6 +289,14 @@ async function loadData() {
       'Medium': 'var(--medium)',
       'Low': 'var(--low)',
       'Unspecified': 'var(--muted)'
+    };
+
+    const statusColorMap = {
+      'Open': 'var(--accent)',
+      'Confirmed': 'var(--medium)',
+      'Fixed': 'var(--low)',
+      'Wontfix': 'var(--muted)',
+      'No status set': 'var(--muted)'
     };
 
     const recentIssues = [...issues]
@@ -303,8 +322,13 @@ async function loadData() {
       </div>
 
       <div class="section">
-        <h2>By Type</h2>
+        <h2>By Type <span style="font-size:0.7rem; color:var(--muted); font-weight:400;">(a bug can have more than one)</span></h2>
         <div id="typeBars"></div>
+      </div>
+
+      <div class="section">
+        <h2>By Status</h2>
+        <div id="statusBars"></div>
       </div>
 
       <div class="section">
@@ -316,6 +340,7 @@ async function loadData() {
     renderBars('gameBars', gameCounts, null);
     renderBars('severityBars', severityCounts, severityColorMap);
     renderBars('typeBars', typeCounts, null);
+    renderBars('statusBars', statusCounts, statusColorMap);
 
     const issueList = document.getElementById('issueList');
     if (recentIssues.length === 0) {
@@ -324,9 +349,12 @@ async function loadData() {
       issueList.innerHTML = recentIssues.map(issue => {
         const severity = severityFromLabels(issue.labels);
         const sevClass = severity ? SEVERITY_CLASS[severity.toLowerCase()] : '';
+        const status = statusFromLabels(issue.labels);
+        const types = typesFromLabels(issue.labels).filter(t => t !== 'Unspecified');
         const stateTag = issue.state === 'open'
           ? '<span class="tag" style="color:var(--accent);border-color:var(--accent);">open</span>'
           : '<span class="tag">closed</span>';
+        const typeTags = types.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('');
         return `
           <a class="issue-card" href="${issue.html_url}" target="_blank" rel="noopener noreferrer">
             <div class="issue-title">${escapeHtml(issue.title)}</div>
@@ -334,6 +362,8 @@ async function loadData() {
               <span class="issue-num">#${issue.number}</span>
               ${stateTag}
               ${severity ? `<span class="tag ${sevClass}">${severity}</span>` : ''}
+              ${status ? `<span class="tag">${escapeHtml(status)}</span>` : ''}
+              ${typeTags}
             </div>
           </a>`;
       }).join('');
