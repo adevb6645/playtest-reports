@@ -150,12 +150,16 @@
 </div>
 
 <script>
-const SEVERITY_ORDER = ['Critical', 'High', 'Medium', 'Low'];
+const SEVERITY_ORDER = ['high', 'medium', 'low'];
 const SEVERITY_CLASS = {
-  'Critical': 'critical',
-  'High': 'high',
-  'Medium': 'medium',
-  'Low': 'low'
+  'high': 'high',
+  'medium': 'medium',
+  'low': 'low'
+};
+const SEVERITY_DISPLAY = {
+  'high': 'High',
+  'medium': 'Medium',
+  'low': 'Low'
 };
 
 function saveConfig(username, repo) {
@@ -171,20 +175,32 @@ function getCookie(name) {
 }
 
 function severityFromLabels(labels) {
-  for (const s of SEVERITY_ORDER) {
-    if (labels.some(l => l.name.toLowerCase().includes(s.toLowerCase()))) return s;
-  }
-  return null;
+  const sevLabel = labels.find(l => l.name.toLowerCase().startsWith('severity:'));
+  if (!sevLabel) return null;
+  const key = sevLabel.name.split(':')[1].trim().toLowerCase();
+  return SEVERITY_DISPLAY[key] || key;
 }
 
 function gameFromLabels(labels) {
   const gameLabel = labels.find(l => l.name.toLowerCase().startsWith('game:'));
-  return gameLabel ? gameLabel.name.split(':')[1].trim() : 'Unspecified';
+  if (!gameLabel) return 'Unspecified';
+  const key = gameLabel.name.split(':')[1].trim();
+  // Turn "crater-command" into "Crater Command" for display
+  return key.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
 function typeFromLabels(labels) {
   const typeLabel = labels.find(l => l.name.toLowerCase().startsWith('type:'));
-  return typeLabel ? typeLabel.name.split(':')[1].trim() : 'Unspecified';
+  if (!typeLabel) return 'Unspecified';
+  const key = typeLabel.name.split(':')[1].trim();
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+function statusFromLabels(labels) {
+  const statusLabel = labels.find(l => l.name.toLowerCase().startsWith('status:'));
+  if (!statusLabel) return null;
+  const key = statusLabel.name.split(':')[1].trim();
+  return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
 function renderBars(containerId, counts, colorMap) {
@@ -238,8 +254,8 @@ async function loadData() {
     const total = issues.length;
     const open = issues.filter(i => i.state === 'open').length;
     const closed = issues.filter(i => i.state === 'closed').length;
-    const criticalOpen = issues.filter(i =>
-      i.state === 'open' && i.labels.some(l => l.name.toLowerCase().includes('critical'))
+    const highOpen = issues.filter(i =>
+      i.state === 'open' && i.labels.some(l => l.name.toLowerCase() === 'severity:high')
     ).length;
 
     const gameCounts = {};
@@ -258,7 +274,6 @@ async function loadData() {
     });
 
     const severityColorMap = {
-      'Critical': 'var(--critical)',
       'High': 'var(--high)',
       'Medium': 'var(--medium)',
       'Low': 'var(--low)',
@@ -274,7 +289,7 @@ async function loadData() {
         <div class="stat-card"><div class="num">${total}</div><div class="label">Total Reports</div></div>
         <div class="stat-card"><div class="num">${open}</div><div class="label">Open</div></div>
         <div class="stat-card"><div class="num">${closed}</div><div class="label">Resolved</div></div>
-        <div class="stat-card"><div class="num">${criticalOpen}</div><div class="label">Critical Open</div></div>
+        <div class="stat-card"><div class="num">${highOpen}</div><div class="label">High Severity Open</div></div>
       </div>
 
       <div class="section">
@@ -308,7 +323,7 @@ async function loadData() {
     } else {
       issueList.innerHTML = recentIssues.map(issue => {
         const severity = severityFromLabels(issue.labels);
-        const sevClass = severity ? SEVERITY_CLASS[severity] : '';
+        const sevClass = severity ? SEVERITY_CLASS[severity.toLowerCase()] : '';
         const stateTag = issue.state === 'open'
           ? '<span class="tag" style="color:var(--accent);border-color:var(--accent);">open</span>'
           : '<span class="tag">closed</span>';
